@@ -79,7 +79,17 @@ func appendIfNew(refList []region, addition region ) []region{
     return append(refList, addition)
 }
 
-func readGzFile(filename string) (map[string][]region, error) {
+func anyIn(inGenes []string, inString string) bool {
+    // are any of our genes of interest in this string?
+    for _,b := range(inGenes) {
+        if strings.Contains(b, inString) {
+            return true
+        }
+    }
+    return false
+}
+
+func readGzFile(filename string, inGenes []string) (map[string][]region, error) {
     // function to read gzipped files
     fi, err := os.Open(filename)
     if err != nil {
@@ -96,17 +106,20 @@ func readGzFile(filename string) (map[string][]region, error) {
     out := make(map[string][]region )
     for scanner.Scan() {
         line := scanner.Text()
-        if !strings.HasPrefix(line, "#") {
+        if !strings.HasPrefix(line, "#") && anyIn(inGenes, line) {
             thisFeat := getGene(line)
             if (thisFeat.appris > 0) && (thisFeat.feature == "start_codon") {
                 // add redundant copies of this feature to the map with 
                 // gene_id, transcript_id, and gene_name keys  
                 // TODO: only add the features that were detected? 
                 //       make a channel for each feature type? 
-		//	 maybe use pointers to avoid duplicating data in memory?
-                out[thisFeat.geneID] = appendIfNew(out[thisFeat.geneID], thisFeat.reg )
-                out[thisFeat.transcriptID] = appendIfNew(out[thisFeat.transcriptID], thisFeat.reg )
-                out[thisFeat.geneName] = appendIfNew(out[thisFeat.geneName], thisFeat.reg )
+		        //	     maybe use pointers to avoid duplicating data in memory?
+                //          I don't think pointers will work, since we don't know which elements of the array will be the same
+                tfr := thisFeat.reg // tfr stands for "this feature region"
+
+                out[thisFeat.geneID] = appendIfNew(out[thisFeat.geneID], tfr )                
+                out[thisFeat.transcriptID] = appendIfNew(out[thisFeat.transcriptID], tfr )
+                out[thisFeat.geneName] = appendIfNew(out[thisFeat.geneName], tfr  )
             }
         }
     }  
@@ -178,6 +191,7 @@ func loadConfig() map[string]string {
      return map[string]string{"fasta": config.Fasta, "gff3":config.Gff3}
 }
 
+
 var wg sync.WaitGroup
 
 func main() {
@@ -192,7 +206,7 @@ func main() {
        warn("No arguments found! Pass some feature names!")    
        os.Exit(1)
     }
-    if *flagUp == 0 *flagDown == 0 {
+    if *flagUp == 0 && *flagDown == 0 {
         warn("Must define upstream and/or downstream")
     }
 
@@ -211,7 +225,7 @@ func main() {
        gff3 = *flagGff3 
     }
     info("reading " + gff3)
-    f, err := readGzFile(gff3)
+    f, err := readGzFile(gff3, inGenes)
     if err != nil {
         abort(err)
     }
@@ -223,7 +237,7 @@ func main() {
        	   wg.Add(1)
            info(v)
 	   outFasta := strings.Join([]string{v, "fa"},".")
-           go doBedStuff(doGff3Stuff(f[v][0], *flagDown, *flagUp), fasta, outFasta, v)
+           doBedStuff(doGff3Stuff(f[v][0], *flagDown, *flagUp), fasta, outFasta, v)
            info("\tdone!")
 	   fmt.Println()
        } else {

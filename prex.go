@@ -187,9 +187,13 @@ func main() {
     flagDown  := flag.Int("down", 0, "downstream distance")
     flag.Parse()
     inGenes := flag.Args()
+
     if len(inGenes) < 1 {
        warn("No arguments found! Pass some feature names!")    
        os.Exit(1)
+    }
+    if *flagUp == 0 *flagDown == 0 {
+        warn("Must define upstream and/or downstream")
     }
 
     config := loadConfig()

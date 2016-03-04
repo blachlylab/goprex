@@ -35,6 +35,41 @@ type region struct {
 	strand string
 }
 
+//methods bound to the region struct
+func (r region) isEmpty() bool {
+	if r.start == 0 && r.end == 0 && r.chrom == "" && r.strand == "" {
+		return true
+	}
+	return false
+}
+func (r region) greaterThan(inR region) bool {
+	//if r's region is bigger than inR's region, return true
+	if r.chrom == inR.chrom && r.strand == inR.strand {
+		if r.start < inR.start {
+			return true
+		} else if r.end > inR.end {
+			return true
+		}
+	} else if inR.isEmpty() {
+		// if the checked region is empty, r has to be bigger
+		return true
+	}
+	return false
+}
+func (r region) expandTo(inR region) region {
+	// take the union of r and inR to create the largest possible region
+	if r.chrom == inR.chrom && r.strand == inR.strand {
+		if r.start > inR.start {
+			r.start = inR.start
+		} else if r.end < inR.end {
+			r.end = inR.end
+		}
+	} else if r.start == 0 && r.end == 0 {
+		r = inR
+	}
+	return r
+}
+
 func getGene(line string) feat {
 	spl := strings.Split(line, "\t")
 	chrom := spl[0]
@@ -84,6 +119,14 @@ func appendIfNew(refList []region, addition region) []region {
 	return append(refList, addition)
 }
 
+func expandIfNew(runningRegion, addition region) region {
+	if addition.greaterThan(runningRegion) {
+		return runningRegion.expandTo(addition)
+	} else {
+		return runningRegion
+	}
+}
+
 func anyIn(inGenes []string, inString string) bool {
 	// are any of our genes of interest in this string?
 	for _, b := range inGenes {
@@ -94,7 +137,7 @@ func anyIn(inGenes []string, inString string) bool {
 	return false
 }
 
-func readGzFile(filename string, inGenes []string) (map[string][]region, error) {
+func readGzFile(filename string, inGenes []string) (map[string]region, error) {
 	// function to read gzipped files
 	fi, err := os.Open(filename)
 	if err != nil {
@@ -108,12 +151,12 @@ func readGzFile(filename string, inGenes []string) (map[string][]region, error) 
 	}
 	defer fz.Close()
 	scanner := bufio.NewScanner(fz)
-	out := make(map[string][]region)
+	out := make(map[string]region)
 	for scanner.Scan() {
 		line := scanner.Text()
 		if !strings.HasPrefix(line, "#") && anyIn(inGenes, line) {
 			thisFeat := getGene(line)
-			if (thisFeat.appris > 0) && (thisFeat.feature == "start_codon") {
+			if thisFeat.appris > 0 { // && (thisFeat.feature == "start_codon") {
 				// add redundant copies of this feature to the map with
 				// gene_id, transcript_id, and gene_name keys
 				// TODO: only add the features that were detected?
@@ -121,26 +164,33 @@ func readGzFile(filename string, inGenes []string) (map[string][]region, error) 
 				//	     maybe use pointers to avoid duplicating data in memory?
 				//          I don't think pointers will work, since we don't know which elements of the array will be the same
 				tfr := thisFeat.reg // tfr stands for "this feature region"
-				out[thisFeat.geneID] = appendIfNew(out[thisFeat.geneID], tfr)
-				out[thisFeat.transcriptID] = appendIfNew(out[thisFeat.transcriptID], tfr)
-				out[thisFeat.geneName] = appendIfNew(out[thisFeat.geneName], tfr)
+				out[thisFeat.geneID] = expandIfNew(out[thisFeat.geneID], tfr)
+				out[thisFeat.transcriptID] = expandIfNew(out[thisFeat.transcriptID], tfr)
+				out[thisFeat.geneName] = expandIfNew(out[thisFeat.geneName], tfr)
 			}
 		}
 	}
 	return out, nil
 }
 
-func validateID(f map[string][]region, v string) bool {
-	resCount := len(f[v])
-	if resCount == 0 {
-		warn("nothing found for " + v)
-		return false
-	} else if resCount > 1 {
-		warn("too many primary isoforms for " + v)
-		//fmt.Println(f[v])
+func validateID(f map[string]region, v string) bool {
+	if _, ok := f[v]; ok {
+		return true
+	} else {
 		return false
 	}
-	return true
+	/*
+	    resCount := f[v]
+		if resCount == 0 {
+			warn("nothing found for " + v)
+			return false
+		} else if resCount > 1 {
+			warn("too many primary isoforms for " + v)
+			//fmt.Println(f[v])
+			return false
+		}
+		return true
+	*/
 }
 
 func doGff3Stuff(r region, up int, down int) region {
@@ -150,9 +200,10 @@ func doGff3Stuff(r region, up int, down int) region {
 		bedStart = r.start - up
 		bedEnd = r.start + down
 	} else if r.strand == "-" {
-		bedStart = r.start - down
-		bedEnd = r.start + up
+		bedStart = r.end - down
+		bedEnd = r.end + up
 	} else {
+		fmt.Println(r)
 		warn("no strand found!")
 	}
 	out := region{chrom: r.chrom, start: bedStart, end: bedEnd, strand: r.strand}
@@ -166,6 +217,7 @@ func doBedStuff(r region, fastaIn string, fastaOut string, name string) {
 		abort(err)
 	}
 	defer os.Remove(tempFile.Name())
+
 	bedName := name + ";" + r.chrom + ":" + strconv.Itoa(r.start) + "-" + strconv.Itoa(r.end) + "(" + r.strand + ")"
 	bedString := strings.Join([]string{r.chrom, strconv.Itoa(r.start), strconv.Itoa(r.end), bedName, ".", r.strand}, "\t")
 	err = ioutil.WriteFile(tempFile.Name(), []byte(bedString+"\n"), 600)
@@ -242,7 +294,7 @@ func main() {
 			//wg.Add(1)
 			info(v)
 			outFasta := strings.Join([]string{v, "fa"}, ".")
-			doBedStuff(doGff3Stuff(f[v][0], *flagDown, *flagUp), fasta, outFasta, v)
+			doBedStuff(doGff3Stuff(f[v], *flagDown, *flagUp), fasta, outFasta, v)
 			info("\tdone!")
 			fmt.Println()
 		} else {

@@ -1,4 +1,4 @@
 {
-    "gff3": "/nfs/13/osu8371/lustre/references.old/human/gencode/GRCh38/gencode.v24.annotation.gff3.gz",
-    "fasta": "/nfs/13/osu8371/lustre/references.old/human/gencode/GRCh38/GRCh38.p3.genome.fa"
+    "gff3": "~/data/ref/gencode22/gencode.v22.annotation.gff3",
+    "fasta": "~/data/ref/gencode22/GRCh38.p2.genome.fa"
 }

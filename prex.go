@@ -13,6 +13,10 @@ import (
     "flag"
 )
 
+import (
+	"github.com/mitchellh/go-homedir"
+)
+
 type feat struct {
     reg region
     feature string 
@@ -188,6 +192,8 @@ func loadConfig() map[string]string {
      if err = jsonParser.Decode(&config); err != nil {
      	abort(err)
      }
+	config.Fasta, _ = homedir.Expand(config.Fasta)
+	config.Gff3, _  = homedir.Expand(config.Gff3)
      return map[string]string{"fasta": config.Fasta, "gff3":config.Gff3}
 }
 

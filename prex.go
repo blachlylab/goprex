@@ -9,7 +9,7 @@ import (
     "os/exec"
     "io/ioutil"
     "encoding/json"
-    "sync"
+    //"sync"
     "flag"
 )
 
@@ -86,7 +86,7 @@ func appendIfNew(refList []region, addition region ) []region{
 func anyIn(inGenes []string, inString string) bool {
     // are any of our genes of interest in this string?
     for _,b := range(inGenes) {
-        if strings.Contains(b, inString) {
+        if strings.Contains(inString, b) {
             return true
         }
     }
@@ -110,7 +110,9 @@ func readGzFile(filename string, inGenes []string) (map[string][]region, error) 
     out := make(map[string][]region )
     for scanner.Scan() {
         line := scanner.Text()
+        
         if !strings.HasPrefix(line, "#") && anyIn(inGenes, line) {
+            
             thisFeat := getGene(line)
             if (thisFeat.appris > 0) && (thisFeat.feature == "start_codon") {
                 // add redundant copies of this feature to the map with 
@@ -119,11 +121,11 @@ func readGzFile(filename string, inGenes []string) (map[string][]region, error) 
                 //       make a channel for each feature type? 
 		        //	     maybe use pointers to avoid duplicating data in memory?
                 //          I don't think pointers will work, since we don't know which elements of the array will be the same
-                tfr := thisFeat.reg // tfr stands for "this feature region"
+                //tfr := thisFeat.reg // tfr stands for "this feature region"
 
-                out[thisFeat.geneID] = appendIfNew(out[thisFeat.geneID], tfr )                
-                out[thisFeat.transcriptID] = appendIfNew(out[thisFeat.transcriptID], tfr )
-                out[thisFeat.geneName] = appendIfNew(out[thisFeat.geneName], tfr  )
+                out[thisFeat.geneID] = appendIfNew(out[thisFeat.geneID], thisFeat.reg )                
+                out[thisFeat.transcriptID] = appendIfNew(out[thisFeat.transcriptID], thisFeat.reg )
+                out[thisFeat.geneName] = appendIfNew(out[thisFeat.geneName], thisFeat.reg  )
             }
         }
     }  
@@ -176,7 +178,7 @@ func doBedStuff(r region, fastaIn string, fastaOut string, name string) {
      if err != nil {
      	abort(err)
      }
-     wg.Done()
+     //wg.Done()
 }
 
 func loadConfig() map[string]string {
@@ -198,7 +200,7 @@ func loadConfig() map[string]string {
 }
 
 
-var wg sync.WaitGroup
+//var wg sync.WaitGroup
 
 func main() {
     flagGff3  := flag.String("gff3", "", "gtf annotation")
@@ -240,17 +242,17 @@ func main() {
     
     for _,v := range(inGenes) {
        if validateID(f,v) {
-       	   wg.Add(1)
+       	   //wg.Add(1)
            info(v)
-	   outFasta := strings.Join([]string{v, "fa"},".")
+	       outFasta := strings.Join([]string{v, "fa"},".")
            doBedStuff(doGff3Stuff(f[v][0], *flagDown, *flagUp), fasta, outFasta, v)
            info("\tdone!")
-	   fmt.Println()
+	       fmt.Println()
        } else {
        	   fmt.Println()
        }
     }
-    wg.Wait()
+    //wg.Wait()
 }
 
 func info(message string) {

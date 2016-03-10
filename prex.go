@@ -177,6 +177,7 @@ func validateID(f map[string]region, v string) bool {
 	if _, ok := f[v]; ok {
 		return true
 	} else {
+		warn("invalid or unknown identifier: " + v)
 		return false
 	}
 	/*
@@ -262,7 +263,25 @@ func main() {
 	if len(inGenes) < 1 {
 		warn("No arguments found! Pass some feature names!")
 		os.Exit(1)
+	} else if len(inGenes) == 1 {
+		// is this a file?
+		fi, err := os.Open(inGenes[0])
+		if err == nil {
+			// this appears to be a file
+			defer fi.Close()
+			var geneFileGenes []string
+			scanner := bufio.NewScanner(fi)
+			for scanner.Scan() {
+				line := scanner.Text()
+				if strings.TrimSpace(line) != "" {
+					geneFileGenes = append(geneFileGenes, line)
+				}
+			inGenes = geneFileGenes
+			}
+		}
+		// otherwise, assume this is a gene identifier	
 	}
+
 	if *flagUp == 0 && *flagDown == 0 {
 		warn("Must define upstream and/or downstream")
 	}

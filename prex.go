@@ -39,12 +39,17 @@ type region struct {
 }
 
 //methods bound to the region struct
+
+// is the region totally uninitialized?
 func (r region) isEmpty() bool {
 	if r.start == 0 && r.end == 0 && r.chrom == "" && r.strand == "" {
 		return true
 	}
 	return false
 }
+
+// is the region "greater than" the passed region?
+// BUG(karl) I am not sure this is complete?
 func (r region) greaterThan(inR region) bool {
 	//if r's region is bigger than inR's region, return true
 	if r.chrom == inR.chrom && r.strand == inR.strand {
@@ -59,6 +64,8 @@ func (r region) greaterThan(inR region) bool {
 	}
 	return false
 }
+
+// take the union of r and inR to create the largest possible region
 func (r region) expandTo(inR region) region {
 	// take the union of r and inR to create the largest possible region
 	if r.chrom == inR.chrom && r.strand == inR.strand {
@@ -73,6 +80,9 @@ func (r region) expandTo(inR region) region {
 	return r
 }
 
+// parse GFF3 row
+// http://www.sequenceontology.org/gff3.shtml
+// tags below really means column 9, "attributes"
 func getGene(line string) feat {
 	spl := strings.Split(line, "\t")
 	chrom := spl[0]
@@ -140,6 +150,9 @@ func anyIn(inGenes []string, inString string) bool {
 	return false
 }
 
+// readGzFile reads a specified gzipped Gff3 file,
+// (uncompressed Gff3 files are not supported at this time)
+// and returns a map of symbols (gene names) to region definitions
 func readGzFile(filename string, inGenes []string) (map[string]region, error) {
 	// function to read gzipped files
 	fi, err := os.Open(filename)
@@ -176,6 +189,9 @@ func readGzFile(filename string, inGenes []string) (map[string]region, error) {
 	return out, nil
 }
 
+// validateID takes a lookup table , f (from readGzFile); and an identifier
+// (i.e. gene name), v. It returns true if that id was found in the
+// annotation, or false if not
 func validateID(f map[string]region, v string) bool {
 	if _, ok := f[v]; ok {
 		return true
@@ -199,6 +215,7 @@ func validateID(f map[string]region, v string) bool {
 
 // expandRegion takes a region, r; and a number of nucleotides
 // upstream and downstream by which to expand the region def'n
+// it returns the expanded region
 func expandRegion(r region, up int, down int) region {
 	bedStart := 0
 	bedEnd := 0

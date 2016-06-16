@@ -1,5 +1,6 @@
 package main
 
+// native imports
 import (
 	"bufio"
 	"compress/gzip"
@@ -12,8 +13,10 @@ import (
 	"strings"
 	//"sync"
 	"flag"
+	"log"
 )
 
+// external imports
 import (
 	"github.com/mitchellh/go-homedir"
 )
@@ -324,14 +327,13 @@ func main() {
 }
 
 func info(message string) {
-	fmt.Println("[ok] " + message)
+	log.Println("[ok] " + message)
 }
 
 func warn(message string) {
-	fmt.Println("[* ] " + message)
+	log.Println("[* ] " + message)
 }
 
-func abort(message error) {
-	fmt.Println("[!!] " + message.Error())
-	os.Exit(1)
+func abort(err error) {
+	log.Fatalln("[!!] " + err.Error())
 }

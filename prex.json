@@ -1,4 +1,4 @@
 {
-    "gff3": "~/data/ref/gencode22/gencode.v22.annotation.gff3",
+    "gff3": "~/data/ref/gencode22/gencode.v22.annotation.gff3.gz",
     "fasta": "~/data/ref/gencode22/GRCh38.p2.genome.fa"
 }

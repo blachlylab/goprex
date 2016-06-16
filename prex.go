@@ -184,20 +184,22 @@ func validateID(f map[string]region, v string) bool {
 		return false
 	}
 	/*
-	    resCount := f[v]
-		if resCount == 0 {
-			warn("nothing found for " + v)
-			return false
-		} else if resCount > 1 {
-			warn("too many primary isoforms for " + v)
-			//fmt.Println(f[v])
-			return false
-		}
-		return true
+		    resCount := f[v]
+			if resCount == 0 {
+				warn("nothing found for " + v)
+				return false
+			} else if resCount > 1 {
+				warn("too many primary isoforms for " + v)
+				//fmt.Println(f[v])
+				return false
+			}
+			return true
 	*/
 }
 
-func doGff3Stuff(r region, up int, down int) region {
+// expandRegion takes a region, r; and a number of nucleotides
+// upstream and downstream by which to expand the region def'n
+func expandRegion(r region, up int, down int) region {
 	bedStart := 0
 	bedEnd := 0
 	if r.strand == "+" {
@@ -214,7 +216,11 @@ func doGff3Stuff(r region, up int, down int) region {
 	return out
 }
 
+// doBedStuff builds a temporary BED file containing the region of interest
+// and executes bedtools' getfasta command
 func doBedStuff(r region, fastaIn string, fastaOut string, name string) {
+	log.Println("doBedStuff() name: " + name)
+	log.Println("doBedStuff() r.start: " + strconv.Itoa(r.start))
 	tempDir := os.TempDir()
 	tempFile, err := ioutil.TempFile(tempDir, "prex_")
 	if err != nil {
@@ -279,10 +285,10 @@ func main() {
 				if strings.TrimSpace(line) != "" {
 					geneFileGenes = append(geneFileGenes, line)
 				}
-			inGenes = geneFileGenes
+				inGenes = geneFileGenes
 			}
 		}
-		// otherwise, assume this is a gene identifier	
+		// otherwise, assume this is a gene identifier
 	}
 
 	if *flagUp == 0 && *flagDown == 0 {
@@ -316,7 +322,7 @@ func main() {
 			//wg.Add(1)
 			info(v)
 			outFasta := strings.Join([]string{v, "fa"}, ".")
-			doBedStuff(doGff3Stuff(f[v], *flagDown, *flagUp), fasta, outFasta, v)
+			doBedStuff(expandRegion(f[v], *flagDown, *flagUp), fasta, outFasta, v)
 			info("\tdone!")
 			fmt.Println()
 		} else {

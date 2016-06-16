@@ -22,7 +22,7 @@ import (
 )
 
 type Feature struct {
-	reg          region
+	reg          Region
 	feature      string
 	strand       string
 	geneID       string
@@ -31,27 +31,27 @@ type Feature struct {
 	appris       int
 }
 
-type region struct {
+type Region struct {
 	chrom  string
 	start  int
 	end    int
 	strand string
 }
 
-//methods bound to the region struct
+//methods bound to the Region struct
 
-// is the region totally uninitialized?
-func (r region) isEmpty() bool {
+// is the Region totally uninitialized?
+func (r Region) isEmpty() bool {
 	if r.start == 0 && r.end == 0 && r.chrom == "" && r.strand == "" {
 		return true
 	}
 	return false
 }
 
-// is the region "greater than" the passed region?
+// is the Region "greater than" the passed Region?
 // BUG(karl) I am not sure this is complete?
-func (r region) greaterThan(inR region) bool {
-	//if r's region is bigger than inR's region, return true
+func (r Region) greaterThan(inR Region) bool {
+	//if r's Region is bigger than inR's Region, return true
 	if r.chrom == inR.chrom && r.strand == inR.strand {
 		if r.start < inR.start {
 			return true
@@ -59,15 +59,16 @@ func (r region) greaterThan(inR region) bool {
 			return true
 		}
 	} else if inR.isEmpty() {
-		// if the checked region is empty, r has to be bigger
+		// if the checked Region is empty, r has to be bigger
 		return true
 	}
 	return false
 }
 
-// take the union of r and inR to create the largest possible region
-func (r region) expandTo(inR region) region {
-	// take the union of r and inR to create the largest possible region
+// take the union of r and inR to create the largest possible Region
+func (r Region) expandTo(inR Region) Region {
+
+	// take the union of r and inR to create the largest possible Region
 	if r.chrom == inR.chrom && r.strand == inR.strand {
 		if r.start > inR.start {
 			r.start = inR.start
@@ -88,7 +89,7 @@ func getGene(line string) Feature {
 
 	feat := spl[2]
 
-	reg := region{chrom: spl[0], start: mustAtoi(spl[3]), end: mustAtoi(spl[4]), strand: spl[6]}
+	reg := Region{chrom: spl[0], start: mustAtoi(spl[3]), end: mustAtoi(spl[4]), strand: spl[6]}
 
 	geneID := ""
 	transcriptID := ""
@@ -123,7 +124,7 @@ func getGene(line string) Feature {
 	return thisFeat
 }
 
-func appendIfNew(refList []region, addition region) []region {
+func appendIfNew(refList []Region, addition Region) []Region {
 	for _, v := range refList {
 		if v == addition {
 			return refList
@@ -132,7 +133,7 @@ func appendIfNew(refList []region, addition region) []region {
 	return append(refList, addition)
 }
 
-func expandIfNew(runningRegion, addition region) region {
+func expandIfNew(runningRegion, addition Region) Region {
 	if addition.greaterThan(runningRegion) {
 		return runningRegion.expandTo(addition)
 	} else {
@@ -152,8 +153,8 @@ func anyIn(inGenes []string, inString string) bool {
 
 // readGzFile reads a specified gzipped Gff3 file,
 // (uncompressed Gff3 files are not supported at this time)
-// and returns a map of symbols (gene names) to region definitions
-func readGzFile(filename string, inGenes []string) (map[string]region, error) {
+// and returns a map of symbols (gene names) to Region definitions
+func readGzFile(filename string, inGenes []string) (map[string]Region, error) {
 	// function to read gzipped files
 	fi, err := os.Open(filename)
 	if err != nil {
@@ -167,7 +168,7 @@ func readGzFile(filename string, inGenes []string) (map[string]region, error) {
 	}
 	defer fz.Close()
 	scanner := bufio.NewScanner(fz)
-	out := make(map[string]region)
+	out := make(map[string]Region)
 	for scanner.Scan() {
 		line := scanner.Text()
 		if !strings.HasPrefix(line, "#") && anyIn(inGenes, line) {
@@ -179,7 +180,7 @@ func readGzFile(filename string, inGenes []string) (map[string]region, error) {
 				//       make a channel for each feature type?
 				//	     maybe use pointers to avoid duplicating data in memory?
 				//          I don't think pointers will work, since we don't know which elements of the array will be the same
-				tfr := thisFeat.reg // tfr stands for "this feature region"
+				tfr := thisFeat.reg // tfr stands for "this feature Region"
 				out[thisFeat.geneID] = expandIfNew(out[thisFeat.geneID], tfr)
 				out[thisFeat.transcriptID] = expandIfNew(out[thisFeat.transcriptID], tfr)
 				out[thisFeat.geneName] = expandIfNew(out[thisFeat.geneName], tfr)
@@ -192,7 +193,7 @@ func readGzFile(filename string, inGenes []string) (map[string]region, error) {
 // validateID takes a lookup table , f (from readGzFile); and an identifier
 // (i.e. gene name), v. It returns true if that id was found in the
 // annotation, or false if not
-func validateID(f map[string]region, v string) bool {
+func validateID(f map[string]Region, v string) bool {
 	if _, ok := f[v]; ok {
 		return true
 	} else {
@@ -213,10 +214,10 @@ func validateID(f map[string]region, v string) bool {
 	*/
 }
 
-// expandRegion takes a region, r; and a number of nucleotides
-// upstream and downstream by which to expand the region def'n
-// it returns the expanded region
-func expandRegion(r region, up int, down int) region {
+// expandRegion takes a Region, r; and a number of nucleotides
+// upstream and downstream by which to expand the Region def'n
+// it returns the expanded Region
+func expandRegion(r Region, up int, down int) Region {
 	bedStart := 0
 	bedEnd := 0
 	if r.strand == "+" {
@@ -229,13 +230,13 @@ func expandRegion(r region, up int, down int) region {
 		fmt.Println(r)
 		warn("no strand found!")
 	}
-	out := region{chrom: r.chrom, start: bedStart, end: bedEnd, strand: r.strand}
+	out := Region{chrom: r.chrom, start: bedStart, end: bedEnd, strand: r.strand}
 	return out
 }
 
-// doBedStuff builds a temporary BED file containing the region of interest
+// doBedStuff builds a temporary BED file containing the Region of interest
 // and executes bedtools' getfasta command
-func doBedStuff(r region, fastaIn string, fastaOut string, name string) {
+func doBedStuff(r Region, fastaIn string, fastaOut string, name string) {
 	log.Println("doBedStuff() name: " + name)
 	log.Println("doBedStuff() r.start: " + strconv.Itoa(r.start))
 	tempDir := os.TempDir()

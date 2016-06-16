@@ -87,15 +87,15 @@ func (r Region) expandTo(inR Region) Region {
 func getGene(line string) Feature {
 	spl := strings.Split(line, "\t")
 
-	feat := spl[2]
+	feat := spl[FieldType]
 
-	reg := Region{chrom: spl[0], start: mustAtoi(spl[3]), end: mustAtoi(spl[4]), strand: spl[6]}
+	reg := Region{chrom: spl[FieldSeqid], start: mustAtoi(spl[FieldStart]), end: mustAtoi(spl[FieldEnd]), strand: spl[FieldStrand]}
 
 	geneID := ""
 	transcriptID := ""
 	geneName := ""
 	appris := 0
-	tags := strings.Split(spl[8], ";")
+	tags := strings.Split(spl[FieldAttributes], ";")
 	for _, v := range tags {
 		tag := strings.Split(v, "=")
 		if tag[0] == "gene_id" {
@@ -336,6 +336,7 @@ func main() {
 	//inGenes := []string{"GATA2", "DNMT3A","RUNX1","ASXL1","MADE_UP_GENE"}
 
 	for _, v := range inGenes {
+		info(v + " : " + idDescriptions[decodeId(v)])
 		if validateID(f, v) {
 			//wg.Add(1)
 			info(v)

@@ -85,11 +85,11 @@ func (r region) expandTo(inR region) region {
 // tags below really means column 9, "attributes"
 func getGene(line string) feat {
 	spl := strings.Split(line, "\t")
-	chrom := spl[0]
+
 	feature := spl[2]
-	start, _ := strconv.Atoi(spl[3])
-	end, _ := strconv.Atoi(spl[4])
-	strand := spl[6]
+
+	reg := region{chrom: spl[0], start: mustAtoi(spl[3]), end: mustAtoi(spl[4]), strand: spl[6]}
+
 	geneID := ""
 	transcriptID := ""
 	geneName := ""
@@ -113,7 +113,7 @@ func getGene(line string) feat {
 		}
 	}
 	thisFeat := feat{
-		reg:          region{chrom: chrom, start: start, end: end, strand: strand},
+		reg:          reg,
 		feature:      feature,
 		geneName:     geneName,
 		geneID:       geneID,
@@ -347,6 +347,15 @@ func main() {
 		}
 	}
 	//wg.Wait()
+}
+
+func mustAtoi(s string) int {
+	i, err := strconv.ParseInt(s, 0, 0)
+	if err != nil {
+		warn("mustAtoi() " + s)
+		abort(err)
+	}
+	return int(i)
 }
 
 func info(message string) {

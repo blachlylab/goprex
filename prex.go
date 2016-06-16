@@ -21,7 +21,7 @@ import (
 	"github.com/mitchellh/go-homedir"
 )
 
-type feat struct {
+type Feature struct {
 	reg          region
 	feature      string
 	strand       string
@@ -83,10 +83,10 @@ func (r region) expandTo(inR region) region {
 // parse GFF3 row
 // http://www.sequenceontology.org/gff3.shtml
 // tags below really means column 9, "attributes"
-func getGene(line string) feat {
+func getGene(line string) Feature {
 	spl := strings.Split(line, "\t")
 
-	feature := spl[2]
+	feat := spl[2]
 
 	reg := region{chrom: spl[0], start: mustAtoi(spl[3]), end: mustAtoi(spl[4]), strand: spl[6]}
 
@@ -112,9 +112,9 @@ func getGene(line string) feat {
 
 		}
 	}
-	thisFeat := feat{
+	thisFeat := Feature{
 		reg:          reg,
-		feature:      feature,
+		feature:      feat,
 		geneName:     geneName,
 		geneID:       geneID,
 		transcriptID: transcriptID,

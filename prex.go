@@ -336,10 +336,10 @@ func main() {
 	//inGenes := []string{"GATA2", "DNMT3A","RUNX1","ASXL1","MADE_UP_GENE"}
 
 	for _, v := range inGenes {
-		info(v + " : " + idDescriptions[decodeId(v)])
+		info(v + " → " + idDescriptions[decodeId(v)])
 		if validateID(f, v) {
 			//wg.Add(1)
-			info(v)
+			info(v + " found")
 			outFasta := strings.Join([]string{v, "fa"}, ".")
 			doBedStuff(expandRegion(f[v], *flagDown, *flagUp), fasta, outFasta, v)
 			info("\tdone!")
@@ -351,6 +351,8 @@ func main() {
 	//wg.Wait()
 }
 
+// Atoi returns also an err parameter
+// Need this mustAtoi form to use inline
 func mustAtoi(s string) int {
 	i, err := strconv.ParseInt(s, 0, 0)
 	if err != nil {

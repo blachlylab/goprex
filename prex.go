@@ -6,6 +6,7 @@ import (
 	"compress/gzip"
 	"encoding/json"
 	"fmt"
+	"io"
 	"io/ioutil"
 	"os"
 	"os/exec"
@@ -14,180 +15,129 @@ import (
 	//"sync"
 	"flag"
 	"log"
-)
 
-// external imports
-import (
+	// external imports
+	"github.com/blachlylab/gff3"
 	"github.com/mitchellh/go-homedir"
 )
 
-type Feature struct {
-	reg          Region
-	feature      string
-	strand       string
-	geneID       string
-	geneName     string
-	transcriptID string
-	appris       int
+// GetAppris will parse the principal isoform number out of tag field
+// Cannot use the gff3 'get' methods since this can be part of a comma-separated list
+func GetAppris(myRecord *gff3.Record) int {
+	keyword := "appris_principal_"
+	tag, ok := myRecord.AttributesField["tag"]
+	if !ok {
+		return -1
+	}
+	if !strings.Contains(tag, keyword) {
+		return -1
+	}
+	i := strings.Index(tag, keyword) + len(keyword)
+	out, err := strconv.Atoi(tag[i : i+1])
+	if err != nil {
+		log.Fatal("cannot convert " + tag[i:i+1] + " to int")
+	}
+	return out
 }
 
-type Region struct {
-	chrom  string
-	start  int
-	end    int
-	strand string
-}
-
-//methods bound to the Region struct
-
-// is the Region totally uninitialized?
-func (r Region) isEmpty() bool {
-	if r.start == 0 && r.end == 0 && r.chrom == "" && r.strand == "" {
-		return true
+// GetTrump will determine which of two GFF3 records is more likely the "principal" isoform
+// Checks principal tag, transcript support level, and level
+// Based on info from here: http://www.gencodegenes.org/faq.html
+func GetTrump(rec1, rec2 *gff3.Record) *gff3.Record {
+	// is either of them empty?
+	if !rec1.Complete {
+		return rec2
+	} else if !rec2.Complete {
+		return rec1
 	}
-	return false
-}
-
-// is the Region "greater than" the passed Region?
-// BUG(karl) I am not sure this is complete?
-func (r Region) greaterThan(inR Region) bool {
-	//if r's Region is bigger than inR's Region, return true
-	if r.chrom == inR.chrom && r.strand == inR.strand {
-		if r.start < inR.start {
-			return true
-		} else if r.end > inR.end {
-			return true
-		}
-	} else if inR.isEmpty() {
-		// if the checked Region is empty, r has to be bigger
-		return true
+	// is one of them a lower principal isoform?
+	var principal [2]int
+	principal[0] = GetAppris(rec1)
+	principal[1] = GetAppris(rec2)
+	if principal[0] > principal[1] {
+		return rec2
+	} else if principal[1] > principal[0] {
+		return rec1
 	}
-	return false
-}
-
-// take the union of r and inR to create the largest possible Region
-func (r Region) expandTo(inR Region) Region {
-
-	// take the union of r and inR to create the largest possible Region
-	if r.chrom == inR.chrom && r.strand == inR.strand {
-		if r.start > inR.start {
-			r.start = inR.start
-		} else if r.end < inR.end {
-			r.end = inR.end
-		}
-	} else if r.start == 0 && r.end == 0 {
-		r = inR
+	// does one of them have lower transcript support level?
+	var support [2]int
+	// missing key means TSL = 0; there is no such thing in the specs
+	// http://useast.ensembl.org/Help/Glossary?id=492
+	support[0], _ = strconv.Atoi(rec1.AttributesField["transcript_support_level"])
+	support[1], _ = strconv.Atoi(rec2.AttributesField["transcript_support_level"])
+	if support[0] > support[1] {
+		return rec2
+	} else if support[1] > support[0] {
+		return rec1
 	}
-	return r
-}
-
-// parse GFF3 row
-// http://www.sequenceontology.org/gff3.shtml
-// tags below really means column 9, "attributes"
-func getGene(line string) Feature {
-	spl := strings.Split(line, "\t")
-
-	feat := spl[FieldType]
-
-	reg := Region{chrom: spl[FieldSeqid], start: mustAtoi(spl[FieldStart]), end: mustAtoi(spl[FieldEnd]), strand: spl[FieldStrand]}
-
-	geneID := ""
-	transcriptID := ""
-	geneName := ""
-	appris := 0
-	tags := strings.Split(spl[FieldAttributes], ";")
-	for _, v := range tags {
-		tag := strings.Split(v, "=")
-		if tag[0] == "gene_id" {
-			geneID = tag[1]
-		} else if tag[0] == "transcript_id" {
-			transcriptID = tag[1]
-		} else if tag[0] == "gene_name" {
-			geneName = tag[1]
-		} else if strings.Contains(tag[1], "appris_principal") {
-			for _, field := range strings.Split(tag[1], ",") {
-				if strings.Contains(field, "appris_principal") {
-					appris, _ = strconv.Atoi(strings.Split(field, "_")[2])
-				}
-			}
-
-		}
+	// is one of them lower level?
+	var level [2]int
+	level[0], _ = strconv.Atoi(rec1.AttributesField["level"])
+	level[1], _ = strconv.Atoi(rec2.AttributesField["level"])
+	if level[0] > level[1] {
+		return rec2
+	} else if level[1] > level[0] {
+		return rec1
 	}
-	thisFeat := Feature{
-		reg:          reg,
-		feature:      feat,
-		geneName:     geneName,
-		geneID:       geneID,
-		transcriptID: transcriptID,
-		appris:       appris,
-	}
-	return thisFeat
-}
-
-func appendIfNew(refList []Region, addition Region) []Region {
-	for _, v := range refList {
-		if v == addition {
-			return refList
-		}
-	}
-	return append(refList, addition)
-}
-
-func expandIfNew(runningRegion, addition Region) Region {
-	if addition.greaterThan(runningRegion) {
-		return runningRegion.expandTo(addition)
-	} else {
-		return runningRegion
-	}
-}
-
-func anyIn(inGenes []string, inString string) bool {
-	// are any of our genes of interest in this string?
-	for _, b := range inGenes {
-		if strings.Contains(inString, b) {
-			return true
-		}
-	}
-	return false
+	// couldnt determine a winner
+	return &gff3.Record{}
 }
 
 // readGzFile reads a specified gzipped Gff3 file,
 // (uncompressed Gff3 files are not supported at this time)
 // and returns a map of symbols (gene names) to Region definitions
-func readGzFile(filename string, inGenes []string) (map[string]Region, error) {
-	// function to read gzipped files
+func readGzFile(filename string, passGenes map[string]string) (map[string]Region, error) {
+	// function to read (gzipped agnostic) files
+	var myReader *gff3.Reader
+
 	fi, err := os.Open(filename)
 	if err != nil {
 		return nil, err
 	}
 	defer fi.Close()
-	fz, err := gzip.NewReader(fi)
-	// TODO: detect file format (i.e. .gz) and dynamically open or gzip.open as necessary
-	if err != nil {
-		return nil, err
+	if strings.HasSuffix(filename, ".gz") {
+		// gzipped file needs to be decompressed
+		fz, err := gzip.NewReader(fi)
+		if err != nil {
+			return nil, err
+		}
+		defer fz.Close()
+		myReader = gff3.NewReader(fz)
+	} else {
+		// no gzip; pass reader to gff3 directly
+		myReader = gff3.NewReader(fi)
 	}
-	defer fz.Close()
-	scanner := bufio.NewScanner(fz)
-	out := make(map[string]Region)
-	for scanner.Scan() {
-		line := scanner.Text()
-		if !strings.HasPrefix(line, "#") && anyIn(inGenes, line) {
-			thisFeat := getGene(line)
-			if thisFeat.appris > 0 { // && (thisFeat.feature == "start_codon") {
-				// add redundant copies of this feature to the map with
-				// gene_id, transcript_id, and gene_name keys
-				// TODO: only add the features that were detected?
-				//       make a channel for each feature type?
-				//	     maybe use pointers to avoid duplicating data in memory?
-				//          I don't think pointers will work, since we don't know which elements of the array will be the same
-				tfr := thisFeat.reg // tfr stands for "this feature Region"
-				out[thisFeat.geneID] = expandIfNew(out[thisFeat.geneID], tfr)
-				out[thisFeat.transcriptID] = expandIfNew(out[thisFeat.transcriptID], tfr)
-				out[thisFeat.geneName] = expandIfNew(out[thisFeat.geneName], tfr)
+	out := make(map[string]*gff3.Record)
+	for featName, _ := range passGenes {
+		out[featName] = &gff3.Record{}
+	}
+	var res *gff3.Record
+	for myRecord, err := myReader.Read(); err != io.EOF; myRecord, err = myReader.Read() {
+		if err != nil {
+			log.Fatal(err)
+		}
+		// record the TSS associated with the principal isoform of every gene of interest
+		for featName, featKind := range passGenes {
+			if myRecord.FilterByField("type", "start_codon").FilterByAttribute(featKind, featName).Complete {
+				// this record matches this feature
+				res = GetTrump(out[featName], myRecord)
+				if res.Complete {
+					out[featName] = res
+				} else {
+					fmt.Println("failed ot identify principal")
+				}
+
 			}
 		}
+		// // if strings.Contains(myRecord.AttributesField["tag"], "appris_principal") {
+		// // 	// a principal isoform
+		// // 	// out[myRecord.AttributesField[field]] = Region{chrom: myRecord.SeqidField, start: myRecord.StartField, end: myRecord.EndField, strand: myRecord.StrandField}
+
+		// }
+
 	}
-	return out, nil
+	fmt.Println(out["RUNX1"])
+	return make(map[string]Region), nil
 }
 
 // validateID takes a lookup table , f (from readGzFile); and an identifier
@@ -220,10 +170,10 @@ func validateID(f map[string]Region, v string) bool {
 func expandRegion(r Region, up int, down int) Region {
 	bedStart := 0
 	bedEnd := 0
-	if r.strand == "+" {
+	if r.strand == '+' {
 		bedStart = r.start - up
 		bedEnd = r.start + down
-	} else if r.strand == "-" {
+	} else if r.strand == '-' {
 		bedStart = r.end - down
 		bedEnd = r.end + up
 	} else {
@@ -246,8 +196,8 @@ func doBedStuff(r Region, fastaIn string, fastaOut string, name string) {
 	}
 	defer os.Remove(tempFile.Name())
 
-	bedName := name + ";" + r.chrom + ":" + strconv.Itoa(r.start) + "-" + strconv.Itoa(r.end) + "(" + r.strand + ")"
-	bedString := strings.Join([]string{r.chrom, strconv.Itoa(r.start), strconv.Itoa(r.end), bedName, ".", r.strand}, "\t")
+	bedName := name + ";" + r.chrom + ":" + strconv.Itoa(r.start) + "-" + strconv.Itoa(r.end) + "(" + string(r.strand) + ")"
+	bedString := strings.Join([]string{r.chrom, strconv.Itoa(r.start), strconv.Itoa(r.end), bedName, ".", string(r.strand)}, "\t")
 	err = ioutil.WriteFile(tempFile.Name(), []byte(bedString+"\n"), 600)
 	if err != nil {
 		abort(err)
@@ -327,21 +277,26 @@ func main() {
 		// if command line flag is provided, take it
 		gff3 = *flagGff3
 	}
+
+	passGenes := make(map[string]string)
+	for _, v := range inGenes {
+		passGenes[v] = idGff3Names[decodeId(v)]
+	}
 	info("reading " + gff3)
-	f, err := readGzFile(gff3, inGenes)
+	f, err := readGzFile(gff3, passGenes)
 	if err != nil {
 		abort(err)
 	}
 	info("probing genes ...")
 	//inGenes := []string{"GATA2", "DNMT3A","RUNX1","ASXL1","MADE_UP_GENE"}
-
-	for _, v := range inGenes {
-		info(v + " → " + idDescriptions[decodeId(v)])
-		if validateID(f, v) {
+	panic("oh no")
+	for featName, _ := range passGenes {
+		info(featName + " → " + idDescriptions[decodeId(featName)])
+		if true { //validateID(f, featName)
 			//wg.Add(1)
-			info(v + " found")
-			outFasta := strings.Join([]string{v, "fa"}, ".")
-			doBedStuff(expandRegion(f[v], *flagDown, *flagUp), fasta, outFasta, v)
+			info(featName + " found")
+			outFasta := strings.Join([]string{featName, "fa"}, ".")
+			doBedStuff(expandRegion(f[featName], *flagDown, *flagUp), fasta, outFasta, featName)
 			info("\tdone!")
 			fmt.Println()
 		} else {

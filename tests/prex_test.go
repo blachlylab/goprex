@@ -101,7 +101,12 @@ func TestPrincipalTrumpRule(t *testing.T) {
 	newRecord.AttributesField["level"] = myRecord.AttributesField["level"]
 	res = prex.GetTrump(&newRecord, &myRecord)
 	if !reflect.DeepEqual(res, &gff3.Record{}) || res.Complete {
-		t.Errorf("GetTrump incorrectly found a principal isoform between two, identical structs")
+		t.Errorf("GetTrump incorrectly found a principal isoform between two identical structs")
+	}
+	// better yet, write tests for myRecord where complete is forced to False
+	res = prex.GetTrump(&gff3.Record{}, &gff3.Record{})
+	if res.Complete {
+		t.Errorf("GetTrump incorrectly found a principal isoform between two empty structs")
 	}
 }
 

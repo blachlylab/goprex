@@ -25,10 +25,7 @@ import (
 func GetAppris(myRecord *gff3.Record) int {
 	keyword := "appris_principal_"
 	tag, ok := myRecord.AttributesField["tag"]
-	if !ok {
-		return 99
-	}
-	if !strings.Contains(tag, keyword) {
+	if !ok || !strings.Contains(tag, keyword) {
 		return 99
 	}
 	i := strings.Index(tag, keyword) + len(keyword)
@@ -126,7 +123,7 @@ recordLoop:
 		if err != nil {
 			log.Fatal(err)
 		}
-		if !myRecord.FilterByField("type", "start_codon").Complete {
+		if !myRecord.FilterByField("type", "transcript").Complete {
 			// if this isn't a start codon, skip immediately
 			continue recordLoop
 		}

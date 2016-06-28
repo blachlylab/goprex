@@ -36,7 +36,6 @@ func (r Region) greaterThan(inR Region) bool {
 
 // take the union of r and inR to create the largest possible Region
 func (r Region) expandTo(inR Region) Region {
-
 	// take the union of r and inR to create the largest possible Region
 	if r.chrom == inR.chrom && r.strand == inR.strand {
 		if r.start > inR.start {
